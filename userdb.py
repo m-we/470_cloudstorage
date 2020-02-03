@@ -22,15 +22,14 @@ def table_save(table):
         json.dump(table, fd, indent=1, sort_keys=True)
 
 # Add a new user.
-def user_add(user, password):
+def user_add(user, hashed):
     table = table_get()
     if user in table:
         print('user "{}" already exists'.format(user))
-        return
-    salted = password + 'The quick br0wn fox jump3d over the l4zy dog.'
-    hashed = hashlib.sha256(salted.encode('utf-8')).hexdigest()
+        return -1
     table[user] = {'hashed':hashed,'file_table':{}}
     table_save(table)
+    return 0
 
 # Find an existing user.
 def user_find(user):
@@ -106,13 +105,14 @@ def handle(sock):
         msg, msg_size = socketlib.recv_msg_w_size(sock)
         if msg_size == 0:
             return
+
         cmd = str(msg, 'utf-8')
+        parts = cmd.split(' ')
 
         ### user_add ###
-        if cmd == 'user_add':
-            user = str(socketlib.recv_msg(sock), 'utf-8')
-            password = str(socketlib.recv_msg(sock), 'utf-8')
-            user_add(user, password)
+        if parts[0] == 'user_add':
+            result = user_add(parts[1], parts[2])
+            socketlib.send_msg(sock, result)
 
         ### user_find ###
         elif cmd == 'user_find':
@@ -147,16 +147,23 @@ def handle(sock):
             del table[user]['file_table'][file_name]
             table_save(table)
 
+        elif cmd == 'list':
+            user = str(socketlib.recv_msg(sock), 'utf-8')
+            table = table_get()
+            file_list = [file for file in table[user]['file_table']]
+            byte_data = json.dumps(file_list).encode('utf-8')
+            socketlib.send_msg(sock, byte_data)
+
 if __name__ == '__main__':
-    serversock = socket.socket()
-    serversock.bind((sys.argv[1], int(sys.argv[2])))
-    serversock.listen(5)
+    serversoc = socket.socket()
+    serversoc.bind((sys.argv[1], int(sys.argv[2])))
+    serversoc.listen(5)
     while True:
         print('listening on {}'.format(sys.argv[2]))
-        sock, raddr = serversock.accept()
+        sock, raddr = serversoc.accept()
         print('accepted connection from {}'.format(raddr))
         handle(sock)
         sock.close()
-    serversock.close()
+    serversoc.close()
     #user_table = init_table()
     #user_add('admin', 'admin')

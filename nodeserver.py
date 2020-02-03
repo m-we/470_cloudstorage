@@ -11,6 +11,21 @@ def dest_get(user, file_name, chunk_no):
         os.makedirs(STORAGE_DIR + '/' + user)
     return '{}/{}/{}.chunk{}'.format(STORAGE_DIR, user, file_name, chunk_no)
 
+def chunk_recv(sock):
+    user, file, chunk_no = chunk_data_recv(sock)
+    chunk_size = int.from_bytes(socketlib.recv_msg(sock), 'big')
+    data_left = chunk_size
+    dest_name = dest_get(user, file, chunk_no)
+    print('expecting {} bytes'.format(chunk_size))
+    with open(dest_name, 'wb') as fd:
+        while data_left > 0:
+            msg, msg_size = socketlib.recv_msg_w_size(sock)
+            print('got {}/{} bytes'.format(chunk_size - data_left, chunk_size), end='\r')
+            data_left -= msg_size
+            fd.write(msg)
+        print('got {}/{} bytes'.format(chunk_size - data_left, chunk_size))
+    print('')
+
 def chunk_data_recv(sock):
     user = str(socketlib.recv_msg(sock), 'utf-8')
     file_name = str(socketlib.recv_msg(sock), 'utf-8')
@@ -64,6 +79,8 @@ def handle(sock):
             chunk_delete(sock)
         elif cmd == 'cl':
             chunk_load(sock)
+        elif cmd == 'upload':
+            chunk_recv(sock)
 
 if __name__ == '__main__':
     STORAGE_DIR = sys.argv[3] + '/'
