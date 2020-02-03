@@ -9,47 +9,7 @@ STORAGE_DIR = ''
 def dest_get(user, file_name, chunk_no):
     if not os.path.isdir(STORAGE_DIR + '/' + user):
         os.makedirs(STORAGE_DIR + '/' + user)
-    return '{}/{}/{}.chunk{}'.format(STORAGE_DIR, user, file_name, chunk_no)
-
-def chunk_recv(sock):
-    user, file, chunk_no = chunk_data_recv(sock)
-    chunk_size = int.from_bytes(socketlib.recv_msg(sock), 'big')
-    data_left = chunk_size
-    dest_name = dest_get(user, file, chunk_no)
-    print('expecting {} bytes'.format(chunk_size))
-    with open(dest_name, 'wb') as fd:
-        while data_left > 0:
-            msg, msg_size = socketlib.recv_msg_w_size(sock)
-            print('got {}/{} bytes'.format(chunk_size - data_left, chunk_size), end='\r')
-            data_left -= msg_size
-            fd.write(msg)
-        print('got {}/{} bytes'.format(chunk_size - data_left, chunk_size))
-    print('')
-
-def chunk_data_recv(sock):
-    user = str(socketlib.recv_msg(sock), 'utf-8')
-    file_name = str(socketlib.recv_msg(sock), 'utf-8')
-    chunk_no = int.from_bytes(socketlib.recv_msg(sock), 'big')
-    print('incoming chunk:\n\tuser {}\n\tfile_name {}\n\tchunk_no {}\n'.format(user, file_name, chunk_no))
-    return user, file_name, chunk_no
-
-def chunk_add(sock):
-    print('chunk_add called')
-    user, file_name, chunk_no = chunk_data_recv(sock)
-    chunk_size = int.from_bytes(socketlib.recv_msg(sock), 'big')
-
-    data_left = chunk_size
-    dest_name = dest_get(user, file_name, chunk_no)
-    msg_size = 1
-    print('expecting {} bytes'.format(chunk_size))
-    with open(dest_name, 'wb') as fd:
-        while data_left > 0:
-            msg, msg_size = socketlib.recv_msg_w_size(sock)
-            print('got {}/{} bytes'.format(chunk_size - data_left, chunk_size), end='\r')
-            data_left -= msg_size
-            fd.write(msg)
-        print('got {}/{} bytes'.format(chunk_size - data_left, chunk_size))
-    print('')
+    return '{}{}/{}.chunk{}'.format(STORAGE_DIR, user, file_name, chunk_no)
 
 def chunk_delete(sock):
     user, file_name, chunk_no = chunk_data_recv(sock)
@@ -59,28 +19,48 @@ def chunk_delete(sock):
         return
     os.remove(dest_name)
 
-def chunk_load(sock):
-    user, file_name, chunk_no = chunk_data_recv(sock)
-    dest_name = dest_get(user, file_name, chunk_no)
-    with open(dest_name, 'rb') as fd:
-        while (msg := fd.read(1024)) != b'':
-            socketlib.send_msg(sock, msg)
 
 def handle(sock):
     msg_size = 1
     while msg_size != 0:
-        msg, msg_size = socketlib.recv_msg_w_size(sock)
+        cmd, msg_size = socketlib.recv_msg_w_size(sock, str)
         if msg_size == 0:
             return
-        cmd = str(msg, 'utf-8')
-        if cmd == 'ca':
-            chunk_add(sock)
-        elif cmd == 'cd':
-            chunk_delete(sock)
-        elif cmd == 'cl':
-            chunk_load(sock)
-        elif cmd == 'upload':
-            chunk_recv(sock)
+
+        ### upload ###
+        if cmd == 'upload':
+            user = socketlib.recv_msg(sock, str)
+            fdir = STORAGE_DIR + user + '/'
+            if not os.path.isdir(fdir):
+                os.makedirs(fdir)
+
+            fd = open(fdir + 'tmp.dat', 'wb')
+            fname = socketlib.recv_file(sock, fd)
+            fd.close()
+            os.rename(fdir + 'tmp.dat', fdir + fname)
+
+        ### delete ###
+        elif cmd == 'delete':
+            user = socketlib.recv_msg(sock, str)
+            fname = socketlib.recv_msg(sock, str)
+            chunk_no = socketlib.recv_msg(sock, int)
+            
+            dest = dest_get(user, fname, chunk_no)
+            print('deleting {}'.format(dest))
+            if os.path.isfile(dest):
+                os.remove(dest)
+            else:
+                print('\tnot found')
+
+        ### download ###
+        elif cmd == 'download':
+            user = socketlib.recv_msg(sock, str)
+            fname = socketlib.recv_msg(sock, str)
+            chunk_no = socketlib.recv_msg(sock, int)
+
+            print('{}: {} chunk{} requested'.format(user, fname, chunk_no))
+            dest = dest_get(user, fname, chunk_no)
+            socketlib.send_file(sock, dest)
 
 if __name__ == '__main__':
     STORAGE_DIR = sys.argv[3] + '/'

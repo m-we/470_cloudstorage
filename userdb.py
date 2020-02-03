@@ -39,18 +39,15 @@ def user_find(user):
     print('user "{}" not found'.format(user))
 
 # Add a file to a user's files.
-def file_add(user, file_name, file_data):
+def file_add(user, fname, chunk_no, node_no):
     table = table_get()
     if not user in table:
         print('user "{}" not found'.format(user))
         return
 
-    file_table = table[user]['file_table']
-    if file_name in file_table:
-        print('file "{}" already exists'.format(file_name))
-        return
-
-    table[user]['file_table'][file_name] = json.loads(file_data)
+    if not fname in table[user]['files']:
+        table[user]['files'][fname] = {}
+    table[user]['files'][fname][str(chunk_no)] = node_no
     table_save(table)
 
 # Find a file for a user.
@@ -126,33 +123,52 @@ def handle(sock):
             else:
                 socketlib.send_msg(sock, 'n')
 
-        ### file_add ###
-        elif cmd == 'file_add':
-            user = str(socketlib.recv_msg(sock), 'utf-8')
-            file_name = str(socketlib.recv_msg(sock), 'utf-8')
-            file_data = socketlib.recv_msg(sock)
-            file_add(user, file_name, file_data)
-
-        ### file_delete ###
-        elif cmd == 'file_delete':
-            user = str(socketlib.recv_msg(sock), 'utf-8')
-            file_name = str(socketlib.recv_msg(sock), 'utf-8')
-            print('Searching {}\'s files for {}'.format(user, file_name))
-            results = file_find(user, 'file_name', file_name, True)
-            print('\t{} results found'.format(len(results)))
-            byte_data = json.dumps(results).encode('utf-8')
-            socketlib.send_msg(sock, byte_data)
-
-            table = table_get()
-            del table[user]['file_table'][file_name]
-            table_save(table)
-
+        ### list ###
         elif cmd == 'list':
-            user = str(socketlib.recv_msg(sock), 'utf-8')
+            user = socketlib.recv_msg(sock, str)
             table = table_get()
-            file_list = [file for file in table[user]['file_table']]
+            file_list = [file for file in table[user]['files']]
             byte_data = json.dumps(file_list).encode('utf-8')
             socketlib.send_msg(sock, byte_data)
+
+        ### upload ###
+        elif cmd == 'upload':
+            user = socketlib.recv_msg(sock, str)
+            fname = socketlib.recv_msg(sock, str)
+            chunk_no = socketlib.recv_msg(sock, int)
+            node_no = socketlib.recv_msg(sock, int)
+
+            table = table_get()
+            if not fname in table[user]['files']:
+                table[user]['files'][fname] = {}
+            table[user]['files'][fname][str(chunk_no)] = node_no
+            table_save(table)
+
+        ### delete ###
+        elif cmd == 'delete':
+            user = socketlib.recv_msg(sock, str)
+            fname = socketlib.recv_msg(sock, str)
+
+            table = table_get()
+            byte_data = json.dumps(table[user]['files'][fname]).encode('utf-8')
+            socketlib.send_msg(sock, byte_data)
+            del table[user]['files'][fname]
+            table_save(table)
+
+        ### download ###
+        elif cmd == 'download':
+            user = socketlib.recv_msg(sock, str)
+            fname = socketlib.recv_msg(sock, str)
+
+            table = table_get()
+            if not user in table:
+                socketlib.send_msg(sock, 'n')
+                continue
+            if not fname in table[user]['files']:
+                socketlib.send_msg(sock, 'n')
+                continue
+            byte_data = json.dumps(table[user]['files'][fname]).encode('utf-8')
+            socketlib.send_msg(sock, 'y', byte_data)
 
 if __name__ == '__main__':
     serversoc = socket.socket()
