@@ -51,8 +51,6 @@ def send_file(sock, fname):
             msg = fd.read(msg_size)
             send_msg(sock, msg)
             fsent += msg_size
-            #print('{}/{} MB sent'.format(round(fsent/1024**2,2), round(fsize/1024**2),2), end='\r')
-        #print('')
 
 # Receives a file through a socket and writes to the file descriptor fd.
 # File name is returned so that the receiving process can rename if desired.
@@ -66,8 +64,6 @@ def recv_file(sock, fd):
         msg, msg_size = recv_msg_w_size(sock)
         fd.write(msg)
         frecv += msg_size
-        #print('{}/{} MB received'.format(round(frecv/1024**2,2), round(fsize/1024**2,2)), end='\r')
-    #print('')
     return fname
 
 # Relays a file sent through send_file() to one or more sockets.

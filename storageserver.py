@@ -8,6 +8,31 @@ import socketlib
 
 LOGGED_IN = ''
 
+def is_active(sock):
+    try:
+        socketlib.send_msg(sock, 'test')
+        return True
+    except:
+        return False
+
+def route_2(nodes, jsn):
+    for node in jsn['0']:
+        if is_active(nodes[node]):
+            return node
+    return None
+
+def route_4(nodes):
+    n0 = n1 = None
+    if is_active(nodes[0]):
+        n0 = 0
+    elif is_active(nodes[1]):
+        n0 = 1
+    if is_active(nodes[2]):
+        n1 = 2
+    elif is_active(nodes[3]):
+        n2 = 3
+    return n0, n1
+
 def handle(sock, sock_user, nodes):
     global LOGGED_IN
     msg_size = 1
@@ -96,20 +121,48 @@ def handle(sock, sock_user, nodes):
                     node_s = nodes[node]
                     print('sending del req for chunk {} to node{}'.format(node, chunk))
                     socketlib.send_msg(node_s, 'delete', LOGGED_IN, fname, int(chunk))
-            
-            '''fname = socketlib.recv_msg(sock, str)
-            socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
-            jsn = json.loads(socketlib.recv_msg(sock_user, str))
-            print('jsn data {}'.format(jsn))
-            for chunk in jsn:
-                node = nodes[jsn[chunk]]
-                print('sending del req for chunk {} to node{}'.format(chunk, jsn[chunk]))
-                socketlib.send_msg(node, 'delete', LOGGED_IN, fname, int(chunk))
-            '''
 
         ### download ###
         elif cmd == 'download':
             fname = socketlib.recv_msg(sock, str)
+            socketlib.send_msg(sock_user, 'download', LOGGED_IN, fname)
+            reply = socketlib.recv_msg(sock_user, str)
+            if reply != 'y':
+                socketlib.send_msg(sock, 'n')
+                continue
+
+            print('got back y from userdb')
+
+            jsn = json.loads(socketlib.recv_msg(sock_user, str))
+            print('json is {}'.format(jsn))
+            # single-chunk
+            if len(jsn) == 1:
+                s0 = route_2(nodes, jsn)
+                if s0 == None:
+                    socketlib.send_msg(sock, 'n')
+                    continue
+            # multi-chunk
+            else:
+                s0, s1 = route_4(nodes)
+                if s0 == None or s1 == None:
+                    socketlib.send_msg(sock, 'n')
+                    continue
+
+            socketlib.send_msg(sock, 'y')
+            for chunk in jsn:
+                if int(chunk) % 2 == 0:
+                    node_curr = s0
+                else:
+                    node_curr = s1
+                
+                print('requesting chunk {} from node{}'.format(chunk, node_curr))
+                socketlib.send_msg(nodes[node_curr], 'download', LOGGED_IN, fname, int(chunk))
+                socketlib.send_msg(sock, 'download')
+                socketlib.relay_file(nodes[node_curr], sock)
+                print('finished chunk {}'.format(chunk))
+            socketlib.send_msg(sock, 'end')
+            
+            '''fname = socketlib.recv_msg(sock, str)
             socketlib.send_msg(sock_user, 'download', LOGGED_IN, fname)
             reply = socketlib.recv_msg(sock_user, str)
             if reply == 'y':
@@ -123,7 +176,7 @@ def handle(sock, sock_user, nodes):
                     socketlib.relay_file(node, sock)
                 socketlib.send_msg(sock, 'end')
             else:
-                socketlib.send_msg(sock, 'n')
+                socketlib.send_msg(sock, 'n')'''
                 
                 
 

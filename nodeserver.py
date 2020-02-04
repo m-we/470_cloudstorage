@@ -62,6 +62,10 @@ def handle(sock):
             dest = dest_get(user, fname, chunk_no)
             socketlib.send_file(sock, dest)
 
+        ### test ###
+        elif cmd == 'test':
+            pass
+
 if __name__ == '__main__':
     STORAGE_DIR = sys.argv[3] + '/'
     if not os.path.isdir(STORAGE_DIR):
