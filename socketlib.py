@@ -41,7 +41,7 @@ def recv_msg(sock, typ=bytes):
 # recipient that a file is incoming, the calling process needs to do this
 # manually.
 def send_file(sock, fname):
-    print('send {}:'.format(fname))
+    #print('send {}:'.format(fname))
     fsize = os.stat(fname).st_size
     fsent = 0
     send_msg(sock, fname, fsize)
@@ -51,30 +51,30 @@ def send_file(sock, fname):
             msg = fd.read(msg_size)
             send_msg(sock, msg)
             fsent += msg_size
-            print('sent {}/{} bytes'.format(fsent, fsize), end='\r')
-        print('')
+            #print('{}/{} MB sent'.format(round(fsent/1024**2,2), round(fsize/1024**2),2), end='\r')
+        #print('')
 
 # Receives a file through a socket and writes to the file descriptor fd.
 # File name is returned so that the receiving process can rename if desired.
 def recv_file(sock, fd):
     fname = recv_msg(sock, str)
     fsize = recv_msg(sock, int)
-    print('receive: {}'.format(fname))
+    #print('receive: {}'.format(fname))
 
     frecv = 0
     while frecv < fsize:
         msg, msg_size = recv_msg_w_size(sock)
         fd.write(msg)
         frecv += msg_size
-        print('received {}/{} bytes'.format(frecv, fsize), end='\r')
-    print('')
+        #print('{}/{} MB received'.format(round(frecv/1024**2,2), round(fsize/1024**2,2)), end='\r')
+    #print('')
     return fname
 
 # Relays a file sent through send_file() to one or more sockets.
 def relay_file(sock, *dests):
     fname = recv_msg(sock, str)
     fsize = recv_msg(sock, int)
-    print('relay: {}'.format(fname))
+    #print('relay: {}'.format(fname))
 
     for dest in dests:
         send_msg(dest, fname, fsize)
@@ -85,5 +85,5 @@ def relay_file(sock, *dests):
         for dest in dests:
             send_msg(dest, msg)
         frecv += msg_size
-        print('relayed {}/{} bytes'.format(frecv, fsize), end='\r')
-    print('')
+        #print('{}/{} MB relayed'.format(round(frecv/1024**2,2), round(fsize/1024**2),2), end='\r')
+    #print('')

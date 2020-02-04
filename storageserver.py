@@ -12,12 +12,11 @@ def handle(sock, sock_user, nodes):
     global LOGGED_IN
     msg_size = 1
     while msg_size != 0:
-        msg, msg_size = socketlib.recv_msg_w_size(sock)
+        cmd, msg_size = socketlib.recv_msg_w_size(sock, str)
         if msg_size == 0:
             return
 
-        cmd = str(msg, 'utf-8')
-
+        ### createaccount ###
         if cmd == 'user_add':
             user = socketlib.recv_msg(sock)
             hashed = socketlib.recv_msg(sock)
@@ -28,25 +27,28 @@ def handle(sock, sock_user, nodes):
             else:
                 socketlib.send_msg(sock, 'User already exists')
 
+        ### login ###
         elif cmd == 'login':
             if LOGGED_IN != '':
                 socketlib.send_msg(sock, 'You are already logged in as {}'.format(LOGGED_IN))
                 continue
             user = socketlib.recv_msg(sock, str)
             hashed = socketlib.recv_msg(sock, str)
-            print('Attempting login for {}'.format(user))
+            print('Attempting login for {}, '.format(user), end='')
             
             socketlib.send_msg(sock_user, 'user_find', user, hashed)
-            reply = str(socketlib.recv_msg(sock_user), 'utf-8')
-            print('Reply from userdb was {}'.format(reply))
+            reply = socketlib.recv_msg(sock_user, str)
 
             if reply == 'y':
+                print('success')
                 LOGGED_IN = user
                 socketlib.send_msg(sock, 'Login successful')
             else:
+                print('failed')
                 socketlib.send_msg(sock, 'Login failed')
                 sock.close()
 
+        ### logout ###
         elif cmd == 'logout':
             LOGGED_IN = ''
             socketlib.send_msg(sock, 'Logged out')
@@ -65,14 +67,37 @@ def handle(sock, sock_user, nodes):
         elif cmd == 'upload':
             fname = socketlib.recv_msg(sock, str)
             chunk_no = socketlib.recv_msg(sock, int)
-            socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 0)
-            
-            socketlib.send_msg(nodes[0], 'upload', LOGGED_IN)
-            socketlib.relay_file(sock, nodes[0])
+            #socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 0)
+
+            if chunk_no % 2 == 0:
+                dest0 = nodes[0]
+                dest1 = nodes[1]
+                socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 0)
+                socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 1)
+            else:
+                dest0 = nodes[2]
+                dest1 = nodes[3]
+                socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 2)
+                socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 3)
+
+            socketlib.send_msg(dest0, 'upload', LOGGED_IN)
+            socketlib.send_msg(dest1, 'upload', LOGGED_IN)
+            socketlib.relay_file(sock, dest0, dest1)
 
         ### delete ###
         elif cmd == 'delete':
             fname = socketlib.recv_msg(sock, str)
+            socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
+            reply = socketlib.recv_msg(sock_user, str)
+            jsn = json.loads(reply)
+
+            for chunk in jsn:
+                for node in jsn[chunk]:
+                    node_s = nodes[node]
+                    print('sending del req for chunk {} to node{}'.format(node, chunk))
+                    socketlib.send_msg(node_s, 'delete', LOGGED_IN, fname, int(chunk))
+            
+            '''fname = socketlib.recv_msg(sock, str)
             socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
             jsn = json.loads(socketlib.recv_msg(sock_user, str))
             print('jsn data {}'.format(jsn))
@@ -80,6 +105,7 @@ def handle(sock, sock_user, nodes):
                 node = nodes[jsn[chunk]]
                 print('sending del req for chunk {} to node{}'.format(chunk, jsn[chunk]))
                 socketlib.send_msg(node, 'delete', LOGGED_IN, fname, int(chunk))
+            '''
 
         ### download ###
         elif cmd == 'download':
@@ -111,9 +137,9 @@ if __name__ == '__main__':
     sock_node2 = socket.socket()
     sock_node3 = socket.socket()
     sock_node0.connect(('localhost', 40000))
-    #sock_node1.connect(('localhost', 40001))
-    #sock_node2.connect(('localhost', 40002))
-    #sock_node3.connect(('localhost', 40003))
+    sock_node1.connect(('localhost', 40001))
+    sock_node2.connect(('localhost', 40002))
+    sock_node3.connect(('localhost', 40003))
 
     nodes = [sock_node0, sock_node1, sock_node2, sock_node3]
     

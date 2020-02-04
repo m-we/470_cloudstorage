@@ -34,10 +34,12 @@ def file_upload(sock, fname):
 
         socketlib.send_msg(sock, 'upload', fname, chunk_no)
         socketlib.send_file(sock, fwr_name)
+
+        print('{}/{} MB sent'.format(round((fsize-fleft)/1024**2,2), round(fsize/1024**2,2)), end='\r')
         
         chunk_no += 1
         os.remove(fwr_name)
-        
+    print('')
     frb.close()
 
 def file_download(sock, fname):
@@ -67,6 +69,15 @@ def process(sock, cmd):
 
     ### upload ###
     elif parts[0] == 'upload':
+        if not os.path.isfile(parts[1]):
+            print('Cannot find that file')
+            return
+        socketlib.send_msg(sock, 'list')
+        reply = json.loads(socketlib.recv_msg(sock, str))
+        if parts[1] in reply:
+            print('A file of that name already exists, cannot upload')
+            return
+
         file_upload(sock, parts[1])
 
     ### delete ###
@@ -81,6 +92,21 @@ def process(sock, cmd):
             print('File could not be retrieved')
         else:
             file_download(sock, parts[1])
+
+    ### help ###
+    elif parts[0] == 'help':
+        print("""### commands ###
+list
+    List all files uploaded for the current user.
+upload <file>
+    Upload a file to the server.
+download <file>
+    Download a file from the server.
+delete <file>
+    Delete a file from the server.
+logout
+    Log out of the server.
+""")
 
 if __name__ == '__main__':
     sock = socket.socket()

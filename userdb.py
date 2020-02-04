@@ -135,13 +135,16 @@ def handle(sock):
         elif cmd == 'upload':
             user = socketlib.recv_msg(sock, str)
             fname = socketlib.recv_msg(sock, str)
-            chunk_no = socketlib.recv_msg(sock, int)
+            chunk_no = str(socketlib.recv_msg(sock, int))
             node_no = socketlib.recv_msg(sock, int)
 
             table = table_get()
             if not fname in table[user]['files']:
                 table[user]['files'][fname] = {}
-            table[user]['files'][fname][str(chunk_no)] = node_no
+            if not chunk_no in table[user]['files'][fname]:
+                table[user]['files'][fname][chunk_no] = [node_no]
+            if not node_no in table[user]['files'][fname][chunk_no]:
+                table[user]['files'][fname][chunk_no].append(node_no)
             table_save(table)
 
         ### delete ###
