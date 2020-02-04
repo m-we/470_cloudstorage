@@ -15,23 +15,12 @@ def is_active(sock):
     except:
         return False
 
-def route_2(nodes, jsn):
-    for node in jsn['0']:
-        if is_active(nodes[node]):
-            return node
+def route_2(nodes, n0, n1):
+    if is_active(nodes[n0]):
+        return n0
+    elif is_active(nodes[n1]):
+        return n1
     return None
-
-def route_4(nodes):
-    n0 = n1 = None
-    if is_active(nodes[0]):
-        n0 = 0
-    elif is_active(nodes[1]):
-        n0 = 1
-    if is_active(nodes[2]):
-        n1 = 2
-    elif is_active(nodes[3]):
-        n2 = 3
-    return n0, n1
 
 def handle(sock, sock_user, nodes):
     global LOGGED_IN
@@ -137,13 +126,14 @@ def handle(sock, sock_user, nodes):
             print('json is {}'.format(jsn))
             # single-chunk
             if len(jsn) == 1:
-                s0 = route_2(nodes, jsn)
+                s0 = route_2(nodes, 0, 1)
                 if s0 == None:
                     socketlib.send_msg(sock, 'n')
                     continue
             # multi-chunk
             else:
-                s0, s1 = route_4(nodes)
+                s0 = route_2(nodes, 0, 1)
+                s1 = route_2(nodes, 2, 3)
                 if s0 == None or s1 == None:
                     socketlib.send_msg(sock, 'n')
                     continue
@@ -161,40 +151,19 @@ def handle(sock, sock_user, nodes):
                 socketlib.relay_file(nodes[node_curr], sock)
                 print('finished chunk {}'.format(chunk))
             socketlib.send_msg(sock, 'end')
-            
-            '''fname = socketlib.recv_msg(sock, str)
-            socketlib.send_msg(sock_user, 'download', LOGGED_IN, fname)
-            reply = socketlib.recv_msg(sock_user, str)
-            if reply == 'y':
-                socketlib.send_msg(sock, 'y')
-                jsn = json.loads(socketlib.recv_msg(sock_user, str))
-                for chunk in jsn:
-                    node = nodes[jsn[chunk]]
-                    print('requesting chunk {} from node{}'.format(chunk, jsn[chunk]))
-                    socketlib.send_msg(node, 'download', LOGGED_IN, fname, int(chunk))
-                    socketlib.send_msg(sock, 'download')
-                    socketlib.relay_file(node, sock)
-                socketlib.send_msg(sock, 'end')
-            else:
-                socketlib.send_msg(sock, 'n')'''
-                
-                
 
 if __name__ == '__main__':
     sock_user = socket.socket()
     sock_user.connect((sys.argv[3], int(sys.argv[4])))
 
-    # connect to node servers
-    sock_node0 = socket.socket()
-    sock_node1 = socket.socket()
-    sock_node2 = socket.socket()
-    sock_node3 = socket.socket()
-    sock_node0.connect(('localhost', 40000))
-    sock_node1.connect(('localhost', 40001))
-    sock_node2.connect(('localhost', 40002))
-    sock_node3.connect(('localhost', 40003))
-
-    nodes = [sock_node0, sock_node1, sock_node2, sock_node3]
+    nodes = []
+    for x in range(40000, 40004):
+        try:
+            ss = socket.socket()
+            ss.connect(('localhost', x))
+            nodes.append(ss)
+        except:
+            nodes.append(None)
     
     serversoc = socket.socket()
     serversoc.bind((sys.argv[1], int(sys.argv[2])))

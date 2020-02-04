@@ -45,9 +45,7 @@ def file_upload(sock, fname):
 def file_download(sock, fname):
     fd = open(fname, 'wb')
     while (st := socketlib.recv_msg(sock, str)) != 'end':
-        print('got st {}'.format(st))
         socketlib.recv_file(sock, fd)
-        print('received file')
 
 def process(sock, cmd):
     parts = cmd.split(' ')
