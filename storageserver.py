@@ -22,50 +22,58 @@ def route_2(nodes, n0, n1):
         return n1
     return None
 
+def handle_createaccount(sock, sock_user):
+    user = socketlib.recv_msg(sock)
+    hashed = socketlib.recv_msg(sock)
+    socketlib.send_msg(sock_user, 'user_add', user, hashed)
+    if socketlib.recv_msg(sock_user, int) == 0:
+        socketlib.send_msg(sock, 'y')
+    else:
+        socketlib.send_msg(sock, 'n')
+
+def handle_login(sock, sock_user):
+    global LOGGED_IN
+    if LOGGED_IN != '':
+        print('Repeat login attempt for unknown reason, closing connection')
+        LOGGED_IN = ''
+        sock.close()
+        return
+
+    user = socketlib.recv_msg(sock, str)
+    hashed = socketlib.recv_msg(sock, str)
+    print('Attempting login for {}, '.format(user), end='')
+    socketlib.send_msg(sock_user, 'user_find', user, hashed)
+    if socketlib.recv_msg(sock_user, str) == 'y':
+        print('success')
+        LOGGED_IN = user
+        socketlib.send_msg(sock, 'y')
+    else:
+        print('failed')
+        socketlib.send_msg(sock, 'n')
+        sock.close()
+
 def handle(sock, sock_user, nodes):
     global LOGGED_IN
     msg_size = 1
     while msg_size != 0:
-        cmd, msg_size = socketlib.recv_msg_w_size(sock, str)
+        msg, msg_size = socketlib.recv_msg_w_size(sock)
         if msg_size == 0:
             return
+        try:
+            cmd = str(msg, 'utf-8')
+        except:
+            print('Input not a string')
+            return
 
-        ### createaccount ###
+        if LOGGED_IN == '' and cmd != 'login':
+            return
+
         if cmd == 'user_add':
-            user = socketlib.recv_msg(sock)
-            hashed = socketlib.recv_msg(sock)
-            socketlib.send_msg(sock_user, 'user_add', user, hashed)
-            reply = socketlib.recv_msg(sock_user, int)
-            if reply == 0:
-                socketlib.send_msg(sock, 'User "{}" created'.format(parts[1]))
-            else:
-                socketlib.send_msg(sock, 'User already exists')
-
-        ### login ###
+            handle_createaccount(sock, sock_user)
         elif cmd == 'login':
-            if LOGGED_IN != '':
-                socketlib.send_msg(sock, 'You are already logged in as {}'.format(LOGGED_IN))
-                continue
-            user = socketlib.recv_msg(sock, str)
-            hashed = socketlib.recv_msg(sock, str)
-            print('Attempting login for {}, '.format(user), end='')
-            
-            socketlib.send_msg(sock_user, 'user_find', user, hashed)
-            reply = socketlib.recv_msg(sock_user, str)
-
-            if reply == 'y':
-                print('success')
-                LOGGED_IN = user
-                socketlib.send_msg(sock, 'Login successful')
-            else:
-                print('failed')
-                socketlib.send_msg(sock, 'Login failed')
-                sock.close()
-
-        ### logout ###
+            handle_login(sock, sock_user)
         elif cmd == 'logout':
             LOGGED_IN = ''
-            socketlib.send_msg(sock, 'Logged out')
             return
 
         ### list ###
@@ -79,9 +87,8 @@ def handle(sock, sock_user, nodes):
 
         ### upload ###
         elif cmd == 'upload':
-            fname = socketlib.recv_msg(sock, str)
+            fname = os.path.basename(socketlib.recv_msg(sock, str))
             chunk_no = socketlib.recv_msg(sock, int)
-            #socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 0)
 
             if chunk_no % 2 == 0:
                 dest0 = nodes[0]
@@ -102,8 +109,7 @@ def handle(sock, sock_user, nodes):
         elif cmd == 'delete':
             fname = socketlib.recv_msg(sock, str)
             socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
-            reply = socketlib.recv_msg(sock_user, str)
-            jsn = json.loads(reply)
+            jsn = json.loads(socketlib.recv_msg(sock_user, str))
 
             for chunk in jsn:
                 for node in jsn[chunk]:
@@ -115,14 +121,19 @@ def handle(sock, sock_user, nodes):
         elif cmd == 'download':
             fname = socketlib.recv_msg(sock, str)
             socketlib.send_msg(sock_user, 'download', LOGGED_IN, fname)
-            reply = socketlib.recv_msg(sock_user, str)
-            if reply != 'y':
+            if socketlib.recv_msg(sock_user, str) != 'y':
                 socketlib.send_msg(sock, 'n')
                 continue
 
             print('got back y from userdb')
 
-            jsn = json.loads(socketlib.recv_msg(sock_user, str))
+            jsn = {}
+            jsn_wrong = json.loads(socketlib.recv_msg(sock_user, str))
+            for c in jsn_wrong:
+                jsn[int(c)] = jsn_wrong[c]
+            jsn = sorted(jsn)
+
+            
             print('json is {}'.format(jsn))
             # single-chunk
             if len(jsn) == 1:
@@ -151,6 +162,10 @@ def handle(sock, sock_user, nodes):
                 socketlib.relay_file(nodes[node_curr], sock)
                 print('finished chunk {}'.format(chunk))
             socketlib.send_msg(sock, 'end')
+
+        else:
+            print('Unexpected input')
+            return
 
 if __name__ == '__main__':
     sock_user = socket.socket()

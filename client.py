@@ -7,93 +7,106 @@ import sys
 
 import socketlib
 
-# Return the SHA-256 hash of a password after salting to avoid sending pwds
-# in plaintext.
+# Salt & hash a string.
 def hash_pwd(pwd):
     salted = pwd + 'The quick br0wn fox jump3d over the l4zy dog.'
     return hashlib.sha256(salted.encode('utf-8')).hexdigest()
 
-# Read 1MB from a file and then transmit w/ send_file() until the entire file
-# has been sent. Assign a number to each chunk that will be used for ID.
+# Upload a file to storageserver in 1 MB chunks. First, read 1 MB into a
+# separate file, then call socketlib.send_file() on that file. Delete the file
+# and increment chunk number.
 def file_upload(sock, fname):
     fsize = os.stat(fname).st_size
-    fleft = fsize
+    fsent = 0
     chunk_no = 0
 
-    frb = open(fname, 'rb')
-    while fleft > 0:
-        fwr_name = '{}.chunk{}'.format(fname, chunk_no)
-        fwr = open(fwr_name, 'wb')
-        chunk_size = min(1024**2, fleft)
-        chunk_curr = 0
-        while chunk_curr < chunk_size:
-            fwr.write(frb.read(1024))
-            chunk_curr += 1024
-        fleft -= chunk_size
-        fwr.close()
+    with open(fname, 'rb') as fr:
+        while fsent < fsize:
+            # file.txt.chunk27, file.txt.chunk28, etc.
+            fwname = os.path.basename(fname) + '.chunk' + str(chunk_no)
+            # If there is < 1 MB left to send, set the chunk_size to that.
+            chunk_size = min(1024**2, fsize - fsent)
+            # Track how many bytes of the current chunk have been sent.
+            chunk_curr = 0
 
-        socketlib.send_msg(sock, 'upload', fname, chunk_no)
-        socketlib.send_file(sock, fwr_name)
+            with open(fwname, 'wb') as fw:
+                while chunk_curr < chunk_size:
+                    fw.write(fr.read(1024))
+                    chunk_curr += 1024
+            fsent += chunk_size
 
-        print('{}/{} MB sent'.format(round((fsize-fleft)/1024**2,2), round(fsize/1024**2,2)), end='\r')
-        
-        chunk_no += 1
-        os.remove(fwr_name)
+            # Let storageserver know a file is being uploaded. Include file
+            # name and chunk_no so it can route to the correct node servers.
+            socketlib.send_msg(sock, 'upload', fname, chunk_no)
+            socketlib.send_file(sock, fwname)
+            print('{}/{} MB sent'.format(round(fsent/1024**2,2),
+                                         round(fsize/1024**2,2)), end='\r')
+            chunk_no += 1
+            # Remove the chunk file when finished.
+            os.remove(fwname)
     print('')
-    frb.close()
 
+# Downloading is much easier, just call socketlib.recv_file() into the same
+# file descriptor until every chunk has been sent.
 def file_download(sock, fname):
-    fd = open(fname, 'wb')
-    while (st := socketlib.recv_msg(sock, str)) != 'end':
-        socketlib.recv_file(sock, fd)
+    with open(fname, 'wb') as fd:
+        while socketlib.recv_msg(sock, str) != 'end':
+            socketlib.recv_file(sock, fd)
 
-def process(sock, cmd):
+def handle_createaccount(sock, parts):
+    socketlib.send_msg(sock, 'user_add', parts[1], hash_pwd(parts[2]))
+    if socketlib.recv_msg(sock, str) == 'y':
+        print('Account created')
+    else:
+        print('Account creation failed')
+
+def handle_logout(sock):
+    socketlib.send_msg(sock, 'logout')
+    sock.close()
+    exit()
+
+def handle_list(sock):
+    socketlib.send_msg(sock, 'list')
+    for file in json.loads(socketlib.recv_msg(sock, str)):
+        print(file)
+
+def handle_upload(sock, parts):
+    if not os.path.isfile(parts[1]):
+        print('Cannot find that file')
+        return
+
+    socketlib.send_msg(sock, 'list')
+    if os.path.basename(parts[1]) in json.loads(socketlib.recv_msg(sock, str)):
+        print('A file of that name already exists, cannot upload')
+        return
+
+    file_upload(sock, parts[1])
+
+def handle_delete(sock, parts):
+    socketlib.send_msg(sock, 'delete', parts[1])
+
+def handle_download(sock, parts):
+    socketlib.send_msg(sock, 'download', parts[1])
+    if socketlib.recv_msg(sock, str) == 'n':
+        print('File could not be retrieved')
+        return
+    file_download(sock, parts[1])
+
+def handle(sock, cmd):
     parts = cmd.split(' ')
-    ### createaccount ###
+
     if parts[0] == 'createaccount':
-        socketlib.send_msg(sock, 'user_add', parts[1], hash_pwd(parts[2]))
-        print(socketlib.recv_msg(sock, str))
-
-    ### logout ###
+        handle_createaccount(sock, parts)
     elif parts[0] == 'logout':
-        socketlib.send_msg(sock, 'logout')
-        print(socketlib.recv_msg(sock, str))
-        sock.close()
-
-    ### list ###
+        handle_logout(sock)
     elif parts[0] == 'list':
-        socketlib.send_msg(sock, 'list')
-        reply = json.loads(socketlib.recv_msg(sock, str))
-        for file in reply:
-            print(file)
-
-    ### upload ###
+        handle_list(sock)
     elif parts[0] == 'upload':
-        if not os.path.isfile(parts[1]):
-            print('Cannot find that file')
-            return
-        socketlib.send_msg(sock, 'list')
-        reply = json.loads(socketlib.recv_msg(sock, str))
-        if parts[1] in reply:
-            print('A file of that name already exists, cannot upload')
-            return
-
-        file_upload(sock, parts[1])
-
-    ### delete ###
+        handle_upload(sock, parts)
     elif parts[0] == 'delete':
-        socketlib.send_msg(sock, 'delete', parts[1])
-
-    ### download ###
+        handle_delete(sock, parts)
     elif parts[0] == 'download':
-        socketlib.send_msg(sock, 'download', parts[1])
-        reply = socketlib.recv_msg(sock, str)
-        if reply == 'n':
-            print('File could not be retrieved')
-        else:
-            file_download(sock, parts[1])
-
-    ### help ###
+        handle_download(sock, parts)
     elif parts[0] == 'help':
         print("""### commands ###
 list
@@ -107,19 +120,26 @@ delete <file>
 logout
     Log out of the server.
 """)
+    else:
+        print('unknown command, type help for a list of commands')
 
-if __name__ == '__main__':
+def main():
     sock = socket.socket()
     sock.connect((sys.argv[1], int(sys.argv[2])))
 
     user = input('username: ')
     pwd = getpass.getpass('password: ')
     hashed = hash_pwd(pwd)
-
     socketlib.send_msg(sock, 'login', user, hashed)
-    reply = str(socketlib.recv_msg(sock), 'utf-8')
-    if reply == 'Login successful':
-        cmd = 1
-        while cmd != '':
-            cmd = input('> ')
-            process(sock, cmd)
+
+    if socketlib.recv_msg(sock, str) != 'y':
+        print('Login failed')
+        sock.close()
+        return
+
+    while (cmd := input('> ')) != '':
+        handle(sock, cmd)
+    sock.close()
+
+if __name__ == '__main__':
+    main()

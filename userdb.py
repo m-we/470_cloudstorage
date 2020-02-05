@@ -31,71 +31,6 @@ def user_add(user, hashed):
     table_save(table)
     return 0
 
-# Find an existing user.
-def user_find(user):
-    table = table_get()
-    if user in table:
-        return table[user]
-    print('user "{}" not found'.format(user))
-
-# Add a file to a user's files.
-def file_add(user, fname, chunk_no, node_no):
-    table = table_get()
-    if not user in table:
-        print('user "{}" not found'.format(user))
-        return
-
-    if not fname in table[user]['files']:
-        table[user]['files'][fname] = {}
-    table[user]['files'][fname][str(chunk_no)] = node_no
-    table_save(table)
-
-# Find a file for a user.
-def file_find(user, method, key, exact=False):
-    table = table_get()
-    if not user in table:
-        print('user "{}" not found'.format(user))
-        return
-
-    file_table = table[user]['file_table']
-    results = []
-    if method == 'file_name':
-        for file_name in file_table:
-            if not exact and file_name.startswith(key):
-                results.append([file_name, file_table[file_name]])
-            elif exact and file_name == key:
-                results.append([file_name, file_table[file_name]])
-    return results
-
-# Remove a file from a user.
-def file_remove(user, file_name):
-    table = table_get()
-    if not user in table:
-        print('user "{}" not found'.format(user))
-        return
-
-    file_table = table[user]['file_table']
-    if not file_name in file_table:
-        print('file "{}" not found'.format(file_name))
-
-    del table[user]['file_table'][file_name]
-    table_save()
-
-# Update a file for a user.
-def file_update(user, file_name, file_data):
-    table = table_get()
-    if not user in table:
-        print('user "{}" not found'.format(user))
-        return
-
-    file_table = table[user]['file_table']
-    if not file_name in file_table:
-        print('file "{}" cannot be updated, it must be added first'.format(file_name))
-        return
-
-    table[user]['file_table'][file_name] = file_data
-    table_save()
-
 def handle(sock):
     msg_size = 1
     while msg_size != 0:
@@ -118,6 +53,7 @@ def handle(sock):
             table = table_get()
             if not user in table:
                 socketlib.send_msg(sock, 'n')
+                continue
             if table[user]['hashed'] == hashed:
                 socketlib.send_msg(sock, 'y')
             else:
