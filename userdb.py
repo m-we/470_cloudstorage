@@ -27,7 +27,7 @@ def user_add(user, hashed):
     if user in table:
         print('user "{}" already exists'.format(user))
         return -1
-    table[user] = {'hashed':hashed,'file_table':{}}
+    table[user] = {'hashed':hashed,'files':{}}
     table_save(table)
     return 0
 

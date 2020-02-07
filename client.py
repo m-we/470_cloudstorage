@@ -49,9 +49,9 @@ def file_upload(sock, fname):
 # Downloading is much easier, just call socketlib.recv_file() into the same
 # file descriptor until every chunk has been sent.
 def file_download(sock, fname):
-    with open(fname, 'wb') as fd:
+    with open(fname, 'wb') as fp:
         while socketlib.recv_msg(sock, str) != 'end':
-            socketlib.recv_file(sock, fd)
+            socketlib.recv_file(sock, fp)
 
 def handle_createaccount(sock, parts):
     socketlib.send_msg(sock, 'user_add', parts[1], hash_pwd(parts[2]))
@@ -70,27 +70,29 @@ def handle_list(sock):
     for file in json.loads(socketlib.recv_msg(sock, str)):
         print(file)
 
-def handle_upload(sock, parts):
-    if not os.path.isfile(parts[1]):
-        print('Cannot find that file')
+def handle_upload(sock, file):
+    if not os.path.isfile(file):
+        print('Cannot find "{}"'.format(file))
         return
-
     socketlib.send_msg(sock, 'list')
-    if os.path.basename(parts[1]) in json.loads(socketlib.recv_msg(sock, str)):
-        print('A file of that name already exists, cannot upload')
+    if os.path.basename(file) in json.loads(socketlib.recv_msg(sock, str)):
+        print('The name "{}" is taken already'.format(file))
         return
+    file_upload(sock, file)
 
-    file_upload(sock, parts[1])
+def handle_delete(sock, file):
+    socketlib.send_msg(sock, 'list')
+    if not file in json.loads(socketlib.recv_msg(sock, str)):
+        print('File "{}" not found, cannot delete'.format(file))
+        return
+    socketlib.send_msg(sock, 'delete', file)
 
-def handle_delete(sock, parts):
-    socketlib.send_msg(sock, 'delete', parts[1])
-
-def handle_download(sock, parts):
-    socketlib.send_msg(sock, 'download', parts[1])
+def handle_download(sock, file):
+    socketlib.send_msg(sock, 'download', file)
     if socketlib.recv_msg(sock, str) == 'n':
-        print('File could not be retrieved')
+        print('File "{}" could not be retrieved'.format(file))
         return
-    file_download(sock, parts[1])
+    file_download(sock, file)
 
 def handle(sock, cmd):
     parts = cmd.split(' ')
@@ -102,11 +104,17 @@ def handle(sock, cmd):
     elif parts[0] == 'list':
         handle_list(sock)
     elif parts[0] == 'upload':
-        handle_upload(sock, parts)
+        del parts[0]
+        for file in parts:
+            handle_upload(sock, file)
     elif parts[0] == 'delete':
-        handle_delete(sock, parts)
+        del parts[0]
+        for file in parts:
+            handle_delete(sock, file)
     elif parts[0] == 'download':
-        handle_download(sock, parts)
+        del parts[0]
+        for file in parts:
+            handle_download(sock, file)
     elif parts[0] == 'help':
         print("""### commands ###
 list

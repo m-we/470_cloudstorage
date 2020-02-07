@@ -168,14 +168,12 @@ if __name__ == '__main__':
     sock_user = socket.socket()
     sock_user.connect((sys.argv[3], int(sys.argv[4])))
 
+    # nodeserver host & port will be argv (5,6)...(11,12)
     nodes = []
-    for x in range(40000, 40004):
-        try:
-            ss = socket.socket()
-            ss.connect(('localhost', x))
-            nodes.append(ss)
-        except:
-            nodes.append(None)
+    for x in range(4):
+        s = socket.socket()
+        s.connect((sys.argv[5+x*2],int(sys.argv[6+x*2])))
+        nodes.append(s)
     
     serversoc = socket.socket()
     serversoc.bind((sys.argv[1], int(sys.argv[2])))
