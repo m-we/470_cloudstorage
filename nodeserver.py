@@ -11,14 +11,38 @@ def dest_get(user, file_name, chunk_no):
         os.makedirs(STORAGE_DIR + '/' + user)
     return '{}{}/{}.chunk{}'.format(STORAGE_DIR, user, file_name, chunk_no)
 
-def chunk_delete(sock):
-    user, file_name, chunk_no = chunk_data_recv(sock)
-    dest_name = dest_get(user, file_name, chunk_no)
-    if not os.path.isfile(dest_name):
-        print('chunk "{}" not found'.format(dest_name))
-        return
-    os.remove(dest_name)
+def handle_upload(sock):
+    global STORAGE_DIR
+    user = socketlib.recv_msg(sock, str)
+    fdir = STORAGE_DIR + user + '/'
+    if not os.path.isdir(fdir):
+        os.makedirs(fdir)
 
+    fd = open(fdir + 'tmp.dat', 'wb')
+    fname = socketlib.recv_file(sock, fd)
+    fd.close()
+    os.rename(fdir + 'tmp.dat', fdir + fname)
+
+def handle_delete(sock):
+    user = socketlib.recv_msg(sock, str)
+    fname = socketlib.recv_msg(sock, str)
+    chunk_no = socketlib.recv_msg(sock, int)
+
+    dest = dest_get(user, fname, chunk_no)
+    print('deleting {}'.format(dest))
+    if os.path.isfile(dest):
+        os.remove(dest)
+    else:
+        print('\tnot found')
+
+def handle_download(sock):
+    user = socketlib.recv_msg(sock, str)
+    fname = socketlib.recv_msg(sock, str)
+    chunk_no = socketlib.recv_msg(sock, int)
+
+    print('{}: {} chunk{} requested'.format(user, fname, chunk_no))
+    dest = dest_get(user, fname, chunk_no)
+    socketlib.send_file(sock, dest)
 
 def handle(sock):
     msg_size = 1
@@ -27,42 +51,12 @@ def handle(sock):
         if msg_size == 0:
             return
 
-        ### upload ###
         if cmd == 'upload':
-            user = socketlib.recv_msg(sock, str)
-            fdir = STORAGE_DIR + user + '/'
-            if not os.path.isdir(fdir):
-                os.makedirs(fdir)
-
-            fd = open(fdir + 'tmp.dat', 'wb')
-            fname = socketlib.recv_file(sock, fd)
-            fd.close()
-            os.rename(fdir + 'tmp.dat', fdir + fname)
-
-        ### delete ###
+            handle_upload(sock)
         elif cmd == 'delete':
-            user = socketlib.recv_msg(sock, str)
-            fname = socketlib.recv_msg(sock, str)
-            chunk_no = socketlib.recv_msg(sock, int)
-            
-            dest = dest_get(user, fname, chunk_no)
-            print('deleting {}'.format(dest))
-            if os.path.isfile(dest):
-                os.remove(dest)
-            else:
-                print('\tnot found')
-
-        ### download ###
+            handle_delete(sock)
         elif cmd == 'download':
-            user = socketlib.recv_msg(sock, str)
-            fname = socketlib.recv_msg(sock, str)
-            chunk_no = socketlib.recv_msg(sock, int)
-
-            print('{}: {} chunk{} requested'.format(user, fname, chunk_no))
-            dest = dest_get(user, fname, chunk_no)
-            socketlib.send_file(sock, dest)
-
-        ### test ###
+            handle_download(sock)
         elif cmd == 'test':
             pass
 
