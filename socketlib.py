@@ -11,13 +11,18 @@ def send_msg(sock, *msgs):
         sock.sendall(len(msg).to_bytes(4, 'big'))
         sock.sendall(msg)
 
+def recv_b(sock, num):
+    data = b''
+    while len(data) < num:
+        data += sock.recv(num-len(data))
+    return data
+
 def recv_msg_w_size(sock, typ=bytes):
     try:
-        msg_size = int.from_bytes(sock.recv(4), 'big')
+        msg_size = int.from_bytes(recv_b(sock, 4), 'big')
     except:
         return b'', 0
-    msg = sock.recv(msg_size)
-
+    msg = recv_b(sock, msg_size)
     if typ == int:
         return int.from_bytes(msg, 'big'), msg_size
     elif typ == str:
