@@ -94,6 +94,20 @@ def handle_download(sock, file):
         return
     file_download(sock, file)
 
+def handle_help():
+    print("""### commands ###
+list
+    List all files uploaded for the current user.
+upload <file>
+    Upload a file to the server.
+download <file>
+    Download a file from the server.
+delete <file>
+    Delete a file from the server.
+logout
+    Log out of the server.
+""")
+
 def handle(sock, cmd):
     parts = cmd.split(' ')
 
@@ -116,18 +130,7 @@ def handle(sock, cmd):
         for file in parts:
             handle_download(sock, file)
     elif parts[0] == 'help':
-        print("""### commands ###
-list
-    List all files uploaded for the current user.
-upload <file>
-    Upload a file to the server.
-download <file>
-    Download a file from the server.
-delete <file>
-    Delete a file from the server.
-logout
-    Log out of the server.
-""")
+        handle_help()
     else:
         print('unknown command, type help for a list of commands')
 
@@ -144,6 +147,7 @@ def main():
         print('Login failed')
         sock.close()
         return
+    handle_help()
 
     while (cmd := input('> ')) != '':
         handle(sock, cmd)
