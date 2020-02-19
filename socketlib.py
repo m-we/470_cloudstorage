@@ -22,6 +22,7 @@ def recv_msg_w_size(sock, typ=bytes):
         msg_size = int.from_bytes(recv_b(sock, 4), 'big')
     except:
         return b'', 0
+
     msg = recv_b(sock, msg_size)
     if typ == int:
         return int.from_bytes(msg, 'big'), msg_size

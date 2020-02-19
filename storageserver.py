@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import socket
@@ -56,24 +55,77 @@ def handle_list(sock, sock_user):
     socketlib.send_msg(sock_user, 'list', LOGGED_IN)
     socketlib.send_msg(sock, socketlib.recv_msg(sock_user))
 
+def xor(b1, b2):
+    return bytes([a^b for a, b in zip(b1, b2)])
+
+def send_node(sock_user, nodes, fname, node_no, f_ext):
+    socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, f_ext, node_no)
+    socketlib.send_msg(nodes[node_no], 'upload', LOGGED_IN)
+    socketlib.send_file(nodes[node_no], fname + f_ext)
+    os.remove(fname + f_ext)
+
 def handle_upload(sock, sock_user, nodes):
     fname = os.path.basename(socketlib.recv_msg(sock, str))
-    chunk_no = socketlib.recv_msg(sock, int)
+    ftotl = socketlib.recv_msg(sock, int)
+    print('Total is: {} bytes'.format(ftotl))
+    frecv = 0
 
-    if chunk_no % 2 == 0:
-        dest0 = nodes[0]
-        dest1 = nodes[1]
-        socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 0)
-        socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 1)
-    else:
-        dest0 = nodes[2]
-        dest1 = nodes[3]
-        socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 2)
-        socketlib.send_msg(sock_user, 'upload', LOGGED_IN, fname, chunk_no, 3)
+    exts = ['.A1','.A2','.B1','.B2']
+    for x in range(4):
+        with open(fname + exts[x], 'wb') as fp:
+            while frecv < (x+1)*ftotl/4:
+                data = socketlib.recv_b(sock, min(int((x+1)*ftotl/4)-frecv,1024))
+                frecv += len(data)
+                fp.write(data)
+    print('file received')
 
-    socketlib.send_msg(dest0, 'upload', LOGGED_IN)
-    socketlib.send_msg(dest1, 'upload', LOGGED_IN)
-    socketlib.relay_file(sock, dest0, dest1)
+
+    A1 = open(fname + '.A1', 'rb')
+    A2 = open(fname + '.A2', 'rb')
+    B1 = open(fname + '.B1', 'rb')
+    B2 = open(fname + '.B2', 'rb')
+
+    A1_XOR_B1 = open(fname + '.A1_XOR_B1', 'wb')
+    A2_XOR_B2 = open(fname + '.A2_XOR_B2', 'wb')
+    A2_XOR_B1 = open(fname + '.A2_XOR_B1', 'wb')
+    A1_XOR_A2_XOR_B2 = open(fname + '.A1_XOR_A2_XOR_B2', 'wb')
+
+    fdone = 0
+    ftotl = int(ftotl / 4)
+    while fdone < ftotl:
+        b_a1 = A1.read(min(1024,ftotl-fdone))
+        b_a2 = A2.read(min(1024,ftotl-fdone))
+        b_b1 = B1.read(min(1024,ftotl-fdone))
+        b_b2 = B2.read(min(1024,ftotl-fdone))
+
+        b_a1_xor_b1 = xor(b_a1, b_b1)
+        b_a2_xor_b2 = xor(b_a2, b_b2)
+        b_a2_xor_b1 = xor(b_a2, b_b1)
+        b_a1_xor_a2_xor_b2 = xor(xor(b_a1, b_a2), b_b2)
+
+        A1_XOR_B1.write(b_a1_xor_b1)
+        A2_XOR_B2.write(b_a2_xor_b2)
+        A2_XOR_B1.write(b_a2_xor_b1)
+        A1_XOR_A2_XOR_B2.write(b_a1_xor_a2_xor_b2)
+        fdone += min(1024,ftotl-fdone)
+
+    A1.close()
+    A2.close()
+    B1.close()
+    B2.close()
+    A1_XOR_B1.close()
+    A2_XOR_B2.close()
+    A2_XOR_B1.close()
+    A1_XOR_A2_XOR_B2.close()
+
+    send_node(sock_user, nodes, fname, 0, '.A1')
+    send_node(sock_user, nodes, fname, 0, '.B1')
+    send_node(sock_user, nodes, fname, 1, '.A2')
+    send_node(sock_user, nodes, fname, 1, '.B2')
+    send_node(sock_user, nodes, fname, 2, '.A1_XOR_B1')
+    send_node(sock_user, nodes, fname, 2, '.A2_XOR_B2')
+    send_node(sock_user, nodes, fname, 3, '.A2_XOR_B1')
+    send_node(sock_user, nodes, fname, 3, '.A1_XOR_A2_XOR_B2')
 
 def handle_delete(sock, sock_user, nodes):
     fname = socketlib.recv_msg(sock, str)
@@ -84,7 +136,7 @@ def handle_delete(sock, sock_user, nodes):
         for node in jsn[chunk]:
             node_s = nodes[node]
             print('sending del req for chunk {} to node{}'.format(node, chunk))
-            socketlib.send_msg(node_s, 'delete', LOGGED_IN, fname, int(chunk))
+            socketlib.send_msg(node_s, 'delete', LOGGED_IN, fname, chunk)
 
 def handle_download(sock, user, nodes):
     fname = socketlib.recv_msg(sock, str)

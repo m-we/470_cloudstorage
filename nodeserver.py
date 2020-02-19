@@ -9,7 +9,7 @@ STORAGE_DIR = ''
 def dest_get(user, file_name, chunk_no):
     if not os.path.isdir(STORAGE_DIR + '/' + user):
         os.makedirs(STORAGE_DIR + '/' + user)
-    return '{}{}/{}.chunk{}'.format(STORAGE_DIR, user, file_name, chunk_no)
+    return '{}{}/{}{}'.format(STORAGE_DIR, user, file_name, chunk_no)
 
 def handle_upload(sock):
     global STORAGE_DIR
@@ -26,7 +26,7 @@ def handle_upload(sock):
 def handle_delete(sock):
     user = socketlib.recv_msg(sock, str)
     fname = socketlib.recv_msg(sock, str)
-    chunk_no = socketlib.recv_msg(sock, int)
+    chunk_no = socketlib.recv_msg(sock, str)
 
     dest = dest_get(user, fname, chunk_no)
     print('deleting {}'.format(dest))

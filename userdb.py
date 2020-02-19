@@ -71,7 +71,7 @@ def handle(sock):
         elif cmd == 'upload':
             user = socketlib.recv_msg(sock, str)
             fname = socketlib.recv_msg(sock, str)
-            chunk_no = str(socketlib.recv_msg(sock, int))
+            chunk_no = socketlib.recv_msg(sock, str)
             node_no = socketlib.recv_msg(sock, int)
 
             table = table_get()

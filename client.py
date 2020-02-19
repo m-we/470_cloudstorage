@@ -12,42 +12,18 @@ def hash_pwd(pwd):
     salted = pwd + 'The quick br0wn fox jump3d over the l4zy dog.'
     return hashlib.sha256(salted.encode('utf-8')).hexdigest()
 
-# Upload a file to storageserver in 1 MB chunks. First, read 1 MB into a
-# separate file, then call socketlib.send_file() on that file. Delete the file
-# and increment chunk number.
 def file_upload(sock, fname):
     fsize = os.stat(fname).st_size
+    ftotl = fsize + 4 - (fsize % 4)
+    socketlib.send_msg(sock, 'upload', fname, ftotl)
+
     fsent = 0
-    chunk_no = 0
-
-    with open(fname, 'rb') as fr:
+    with open(fname, 'rb') as fp:
         while fsent < fsize:
-            # file.txt.chunk27, file.txt.chunk28, etc.
-            fwname = os.path.basename(fname) + '.chunk' + str(chunk_no)
-            # If there is < 1 MB left to send, set the chunk_size to that.
-            chunk_size = min(1024**2, fsize - fsent)
-            # Track how many bytes of the current chunk have been sent.
-            chunk_curr = 0
+            sock.sendall(fp.read(min(1024,fsize-fsent)))
+            fsent += min(1024,fsize-fsent)
+    sock.sendall((4-fsize%4)*bytes(str(4-fsize%4),'utf-8')) # pad
 
-            with open(fwname, 'wb') as fw:
-                while chunk_curr < chunk_size:
-                    fw.write(fr.read(1024))
-                    chunk_curr += 1024
-            fsent += chunk_size
-
-            # Let storageserver know a file is being uploaded. Include file
-            # name and chunk_no so it can route to the correct node servers.
-            socketlib.send_msg(sock, 'upload', fname, chunk_no)
-            socketlib.send_file(sock, fwname)
-            print('{}/{} MB sent'.format(round(fsent/1024**2,2),
-                                         round(fsize/1024**2,2)), end='\r')
-            chunk_no += 1
-            # Remove the chunk file when finished.
-            os.remove(fwname)
-    print('')
-
-# Downloading is much easier, just call socketlib.recv_file() into the same
-# file descriptor until every chunk has been sent.
 def file_download(sock, fname):
     with open(fname, 'wb') as fp:
         while socketlib.recv_msg(sock, str) != 'end':
