@@ -22,9 +22,8 @@ def handle_upload(sock):
     if not os.path.isdir(fdir):
         os.makedirs(fdir)
 
-    fd = open(fdir + 'tmp.dat', 'wb')
-    fname = socketlib.recv_file(sock, fd)
-    fd.close()
+    with open(fdir + 'tmp.dat', 'wb') as fp:
+        fname = socketlib.recv_file(sock, fp)
     os.rename(fdir + 'tmp.dat', fdir + fname)
 
 # Delete the requested chunk.

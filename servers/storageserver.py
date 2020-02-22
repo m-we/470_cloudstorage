@@ -176,7 +176,12 @@ def recomb(nodes, avail, fname):
             socketlib.recv_file(nodes[n], fp)
         nodes_done += 1
         np.append(n)
+    print('nodes picked {} and {}'.format(np[0], np[1]))
 
+    print('fp0: {}'.format(fname + exts[np[0]][0]))
+    print('fp1: {}'.format(fname + exts[np[0]][1]))
+    print('fp2: {}'.format(fname + exts[np[1]][0]))
+    print('fp3: {}'.format(fname + exts[np[1]][1]))
     fp0 = open(fname + exts[np[0]][0], 'rb')
     fp1 = open(fname + exts[np[0]][1], 'rb')
     fp2 = open(fname + exts[np[1]][0], 'rb')
@@ -208,8 +213,8 @@ def recomb(nodes, avail, fname):
     elif 1 in np and 2 in np:
         readx(fpf, fp0, fp2)
         readx(fpf, fp1, fp3)
-        read(fpf, fp2)
-        read(fpf, fp3)
+        read(fpf, fp0)
+        read(fpf, fp1)
 
     # B1 B2 <-> A2_XOR_B1 A1_XOR_A2_XOR_B2
     elif 1 in np and 3 in np:
@@ -331,7 +336,10 @@ if __name__ == '__main__':
     nodes = []
     for x in range(4):
         s = socket.socket()
-        s.connect((sys.argv[5+x*2],int(sys.argv[6+x*2])))
+        try:
+            s.connect((sys.argv[5+x*2],int(sys.argv[6+x*2])))
+        except:
+            pass
         nodes.append(s)
     
     serversoc = socket.socket()
