@@ -7,19 +7,13 @@ import socketlib
 
 LOGGED_IN = ''
 
+# Return True if a socket is available.
 def is_active(sock):
     try:
         socketlib.send_msg(sock, 'test')
         return True
     except:
         return False
-
-def route_2(nodes, n0, n1):
-    if is_active(nodes[n0]):
-        return n0
-    elif is_active(nodes[n1]):
-        return n1
-    return None
 
 def handle_createaccount(sock, sock_user):
     user = socketlib.recv_msg(sock)
@@ -292,48 +286,6 @@ def handle_download(sock, user, nodes):
     socketlib.send_file(sock, fname)
     os.remove(fname)
     print('all done with download')
-
-'''def handle_download(sock, user, nodes):
-    fname = socketlib.recv_msg(sock, str)
-    socketlib.send_msg(sock_user, 'download', LOGGED_IN, fname)
-    if socketlib.recv_msg(sock_user, str) != 'y':
-        socketlib.send_msg(sock, 'n')
-        return
-
-    jsn = {}
-    jsn_wrong = json.loads(socketlib.recv_msg(sock_user, str))
-    for c in jsn_wrong:
-        jsn[int(c)] = jsn_wrong[c]
-    jsn = sorted(jsn)
-
-    print('json is {}'.format(jsn))
-    # single-chunk
-    if len(jsn) == 1:
-        s0 = route_2(nodes, 0, 1)
-        if s0 == None:
-            socketlib.send_msg(sock, 'n')
-            return
-    # multi-chunk
-    else:
-        s0 = route_2(nodes, 0, 1)
-        s1 = route_2(nodes, 2, 3)
-        if s0 == None or s1 == None:
-            socketlib.send_msg(sock, 'n')
-            return
-
-    socketlib.send_msg(sock, 'y')
-    for chunk in jsn:
-        if int(chunk) % 2 == 0:
-            node_curr = s0
-        else:
-            node_curr = s1
-
-        print('requesting chunk {} from node{}'.format(chunk, node_curr))
-        socketlib.send_msg(nodes[node_curr], 'download', LOGGED_IN, fname, int(chunk))
-        socketlib.send_msg(sock, 'download')
-        socketlib.relay_file(nodes[node_curr], sock)
-        print('finished chunk {}'.format(chunk))
-    socketlib.send_msg(sock, 'end')'''
 
 def handle(sock, sock_user, nodes):
     global LOGGED_IN
