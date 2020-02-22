@@ -38,7 +38,7 @@ def handle_delete(sock):
 def handle_download(sock):
     user = socketlib.recv_msg(sock, str)
     fname = socketlib.recv_msg(sock, str)
-    chunk_no = socketlib.recv_msg(sock, int)
+    chunk_no = socketlib.recv_msg(sock, str)
 
     print('{}: {} chunk{} requested'.format(user, fname, chunk_no))
     dest = dest_get(user, fname, chunk_no)

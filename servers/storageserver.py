@@ -64,6 +64,17 @@ def send_node(sock_user, nodes, fname, node_no, f_ext):
     socketlib.send_file(nodes[node_no], fname + f_ext)
     os.remove(fname + f_ext)
 
+def handle_delete(sock, sock_user, nodes):
+    fname = socketlib.recv_msg(sock, str)
+    socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
+    jsn = json.loads(socketlib.recv_msg(sock_user, str))
+
+    for chunk in jsn:
+        for node in jsn[chunk]:
+            node_s = nodes[node]
+            print('sending del req for chunk {} to node{}'.format(node, chunk))
+            socketlib.send_msg(node_s, 'delete', LOGGED_IN, fname, chunk)
+
 def handle_upload(sock, sock_user, nodes):
     fname = os.path.basename(socketlib.recv_msg(sock, str))
     ftotl = socketlib.recv_msg(sock, int)
@@ -119,26 +130,170 @@ def handle_upload(sock, sock_user, nodes):
     A1_XOR_A2_XOR_B2.close()
 
     send_node(sock_user, nodes, fname, 0, '.A1')
-    send_node(sock_user, nodes, fname, 0, '.B1')
-    send_node(sock_user, nodes, fname, 1, '.A2')
+    send_node(sock_user, nodes, fname, 0, '.A2')
+    send_node(sock_user, nodes, fname, 1, '.B1')
     send_node(sock_user, nodes, fname, 1, '.B2')
     send_node(sock_user, nodes, fname, 2, '.A1_XOR_B1')
     send_node(sock_user, nodes, fname, 2, '.A2_XOR_B2')
     send_node(sock_user, nodes, fname, 3, '.A2_XOR_B1')
     send_node(sock_user, nodes, fname, 3, '.A1_XOR_A2_XOR_B2')
 
-def handle_delete(sock, sock_user, nodes):
-    fname = socketlib.recv_msg(sock, str)
-    socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
-    jsn = json.loads(socketlib.recv_msg(sock_user, str))
+exts = {0:['.A1','.A2'],1:['.B1','.B2'],2:['.A1_XOR_B1','.A2_XOR_B2'],
+        3:['.A2_XOR_B1','.A1_XOR_A2_XOR_B2']}
 
-    for chunk in jsn:
-        for node in jsn[chunk]:
-            node_s = nodes[node]
-            print('sending del req for chunk {} to node{}'.format(node, chunk))
-            socketlib.send_msg(node_s, 'delete', LOGGED_IN, fname, chunk)
+def read(fpf, fp):
+    while (x := fp.read(1024)) != b'':
+        fpf.write(x)
+    fp.seek(0)
+
+def readx(fpf, fp0, fp1):
+    while (x := fp0.read(1024)) != b'':
+        fpf.write(xor(x, fp1.read(1024)))
+    fp0.seek(0)
+    fp1.seek(0)
+
+def readxx(fpf, fp0, fp1, fp2):
+    while (x := fp0.read(1024)) != b'':
+        fpf.write(xor(xor(x, fp1.read(1024)), fp2.read(1024)))
+    fp0.seek(0)
+    fp1.seek(0)
+    fp2.seek(0)
+
+# B1 B2 <-> A2_XOR_B1 A1_XOR_A2_XOR_B2
+def read3(fpf, fp0, fp1, fp2, fp3):
+    while (x := fp0.read(1024)) != b'':
+        fpf.write(xor(xor(xor(fp2.read(1024), x), fp3.read(1024)), fp1.read(1024)))
+    fp0.seek(0, 0)
+    fp1.seek(0, 0)
+    fp2.seek(0, 0)
+    fp3.seek(0, 0)
+
+def recomb(nodes, avail, fname):
+    nodes_done = 0
+    np = []
+    for n in avail:
+        if nodes_done >= 2:
+            break
+        socketlib.send_msg(nodes[n], 'download', LOGGED_IN, fname, exts[n][0])
+        with open(fname + exts[n][0], 'wb') as fp:
+            socketlib.recv_file(nodes[n], fp)
+        socketlib.send_msg(nodes[n], 'download', LOGGED_IN, fname, exts[n][1])
+        with open(fname + exts[n][1], 'wb') as fp:
+            socketlib.recv_file(nodes[n], fp)
+        nodes_done += 1
+        np.append(n)
+
+    fp0 = open(fname + exts[np[0]][0], 'rb')
+    fp1 = open(fname + exts[np[0]][1], 'rb')
+    fp2 = open(fname + exts[np[1]][0], 'rb')
+    fp3 = open(fname + exts[np[1]][1], 'rb')
+    fpf = open(fname, 'wb')
+
+    # A1 A2 <-> B1 B2
+    if 0 in np and 1 in np:
+        read(fpf, fp0)
+        read(fpf, fp1)
+        read(fpf, fp2)
+        read(fpf, fp3)
+
+    # A1 A2 <-> A1_XOR_B1 A2_XOR_B2
+    elif 0 in np and 2 in np:
+        read(fpf, fp0)
+        read(fpf, fp1)
+        readx(fpf, fp0, fp2)
+        readx(fpf, fp1, fp3)
+
+    # A1 A2 <-> A2_XOR_B1 A1_XOR_A2_XOR_B2
+    elif 0 in np and 3 in np:
+        read(fpf, fp0)
+        read(fpf, fp1)
+        readx(fpf, fp1, fp2)
+        readxx(fpf, fp0, fp1, fp3)
+
+    # B1 B2 <-> A1_XOR_B1 A2_XOR_B2
+    elif 1 in np and 2 in np:
+        readx(fpf, fp0, fp2)
+        readx(fpf, fp1, fp3)
+        read(fpf, fp2)
+        read(fpf, fp3)
+
+    # B1 B2 <-> A2_XOR_B1 A1_XOR_A2_XOR_B2
+    elif 1 in np and 3 in np:
+        read3(fpf, fp0, fp1, fp2, fp3)
+        readx(fpf, fp2, fp0)
+        read(fpf, fp0)
+        read(fpf, fp1)
+
+    # A1B1 A2B2 <-> A2B1 A1A2B2
+
+    # A2B2 + A1A2B2 = A1
+
+    # A2B2 + A1B1 = A1A2B1B2
+    # A1A2B1B2 + A1A2B2 = B1
+    # A2B1 + B1 = A2
+
+    # A2B2 + A1B1 = A1A2B1B2
+    # A1A2B1B2 + A1A2B2 = B1
+
+    # A1A2B2 + A1B1 = A2B1B2
+    # A2B1 + A2B1B2 = B2
+    elif 2 in np and 3 in np:
+        readx(fpf, fp1, fp3)
+        read3(fpf, fp0, fp3, fp1, fp2)
+        readxx(fpf, fp0, fp1, fp3)
+        readxx(fpf, fp0, fp2, fp3)
+
+    fp0.close()
+    fp1.close()
+    fp2.close()
+    fp3.close()
+    fpf.close()
+
+    os.remove(fname + exts[np[0]][0])
+    os.remove(fname + exts[np[0]][1])
+    os.remove(fname + exts[np[1]][0])
+    os.remove(fname + exts[np[1]][1])
+
+    print('recomb finished')
 
 def handle_download(sock, user, nodes):
+    fname = socketlib.recv_msg(sock, str)
+
+    avail = []
+    for x in range(4):
+        if is_active(nodes[x]):
+            avail.append(x)
+
+    if len(avail) < 2:
+        socketlib.send_msg(sock, 'n')
+        return
+    recomb(nodes, avail, fname)
+
+    # get rid of the padding bytes
+    fp = open(fname, 'rb')
+    fp.seek(0, 2) # go to end
+    fp.seek(-1, 1) # go back 1
+    pad = int(str(fp.read(1), 'utf-8'))
+    print('padded by {} bytes'.format(pad))
+
+    fp.seek(0, 0)
+    fp2 = open(fname + '2', 'wb')
+    totl = os.stat(fname).st_size - pad
+    done = 0
+    while done < totl:
+        fp2.write(fp.read(min(1024,totl-done)))
+        done += min(1024, totl-done)
+    fp.close()
+    fp2.close()
+    os.remove(fname)
+    os.rename(fname + '2', fname)
+
+    socketlib.send_msg(sock, 'y')
+    socketlib.send_file(sock, fname)
+    os.remove(fname)
+    print('all done with download')
+
+'''def handle_download(sock, user, nodes):
     fname = socketlib.recv_msg(sock, str)
     socketlib.send_msg(sock_user, 'download', LOGGED_IN, fname)
     if socketlib.recv_msg(sock_user, str) != 'y':
@@ -178,7 +333,7 @@ def handle_download(sock, user, nodes):
         socketlib.send_msg(sock, 'download')
         socketlib.relay_file(nodes[node_curr], sock)
         print('finished chunk {}'.format(chunk))
-    socketlib.send_msg(sock, 'end')
+    socketlib.send_msg(sock, 'end')'''
 
 def handle(sock, sock_user, nodes):
     global LOGGED_IN

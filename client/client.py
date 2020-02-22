@@ -26,8 +26,9 @@ def file_upload(sock, fname):
 
 def file_download(sock, fname):
     with open(fname, 'wb') as fp:
-        while socketlib.recv_msg(sock, str) != 'end':
-            socketlib.recv_file(sock, fp)
+        socketlib.recv_file(sock, fp)
+        #while socketlib.recv_msg(sock, str) != 'end':
+        #    socketlib.recv_file(sock, fp)
 
 def handle_createaccount(sock, parts):
     socketlib.send_msg(sock, 'user_add', parts[1], hash_pwd(parts[2]))
