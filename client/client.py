@@ -15,7 +15,12 @@ def hash_pwd(pwd):
 def file_upload(sock, fname):
     fsize = os.stat(fname).st_size
     ftotl = fsize + 4 - (fsize % 4)
-    socketlib.send_msg(sock, 'upload', fname, ftotl)
+    socketlib.send_msg(sock, 'upload')
+    if socketlib.recv_msg(sock, str) != 'y':
+        print('Upload not available, one or more nodeservers down')
+        return
+    
+    socketlib.send_msg(sock, fname, ftotl)
 
     fsent = 0
     with open(fname, 'rb') as fp:
@@ -62,7 +67,11 @@ def handle_delete(sock, file):
     if not file in json.loads(socketlib.recv_msg(sock, str)):
         print('File "{}" not found, cannot delete'.format(file))
         return
-    socketlib.send_msg(sock, 'delete', file)
+    socketlib.send_msg(sock, 'delete')
+    if socketlib.recv_msg(sock, str) == 'y':
+        socketlib.send_msg(sock, file)
+    else:
+        print('Cannot delete, one or more nodeservers not available')
 
 def handle_download(sock, file):
     socketlib.send_msg(sock, 'download', file)

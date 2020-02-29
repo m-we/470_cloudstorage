@@ -57,6 +57,16 @@ def handle_list(sock, sock_user):
 # Get the list of chunks for the given filename. Send delete commands to
 # every node with a chunk. Send the delete command to userdb.
 def handle_delete(sock, sock_user, nodes):
+    avail = []
+    for x in range(4):
+        if is_active(nodes[x]):
+            avail.append(x)
+    if len(avail) == 4:
+        socketlib.send_msg(sock, 'y')
+    else:
+        socketlib.send_msg(sock, 'n')
+        return
+    
     fname = socketlib.recv_msg(sock, str)
     socketlib.send_msg(sock_user, 'delete', LOGGED_IN, fname)
     jsn = json.loads(socketlib.recv_msg(sock_user, str))
@@ -84,6 +94,17 @@ def send_node(sock_user, nodes, fname, node_no, f_ext):
 # Then, creates the XOR chunks (.A1_XOR_B1, .A2_XOR_B2, etc...).
 # Then, uploads each chunk to the relevant nodeserver.
 def handle_upload(sock, sock_user, nodes):
+    avail = []
+    for x in range(4):
+        if is_active(nodes[x]):
+            avail.append(x)
+    if len(avail) == 4:
+        socketlib.send_msg(sock, 'y')
+    else:
+        socketlib.send_msg(sock, 'n')
+        return
+
+    
     # The client sends the basename anyways, but get the basename again just
     # to make sure.
     fname = os.path.basename(socketlib.recv_msg(sock, str))
